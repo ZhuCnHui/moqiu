@@ -1,0 +1,13 @@
+{
+  "name": "mogu-lab",
+  "version": "1.0.0",
+  "description": "可能性教学随堂实验 - 摸球与翻牌",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.5.4"
+  }
+}
