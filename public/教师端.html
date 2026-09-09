@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>👨‍🏫 教师监控面板 · 摸球实验</title>
+    <title>👨‍🏫 教师监控面板 · 实时画面 + 数据</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -67,23 +67,26 @@
             border-radius: 20px;
             font-size: 0.8rem;
         }
-        .group-card .video-placeholder {
+        .group-card .video-container {
             width: 100%;
-            height: 140px;
+            height: 150px;
             background: #e8efe8;
             border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #9aae9a;
-            font-size: 0.9rem;
-            margin-bottom: 10px;
-            overflow: hidden;
+            position: relative;
         }
-        .group-card .video-placeholder img {
+        .group-card .video-container img {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+        .group-card .video-container .no-video {
+            color: #9aae9a;
+            font-size: 0.9rem;
         }
         .group-card .stats {
             display: flex;
@@ -144,10 +147,10 @@
             background: #e8efe8;
             border-radius: 20px;
             margin-bottom: 16px;
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
         }
         .modal .detail-video img { width: 100%; height: auto; }
         .modal .detail-stats {
@@ -191,6 +194,7 @@
             text-align: center;
             color: #b0c0b0;
             padding: 40px 0;
+            grid-column: 1 / -1;
         }
         @media (max-width: 600px) {
             .group-grid { grid-template-columns: 1fr; }
@@ -201,7 +205,7 @@
 <body>
 <h1>
     👨‍🏫 教师监控面板
-    <small>实时查看各小组摸球数据</small>
+    <small>实时视频 + 摸球数据</small>
 </h1>
 <div class="toolbar">
     <button id="refreshBtn">🔄 刷新数据</button>
@@ -238,6 +242,8 @@
     let allStats = {};
     let currentDetailGroup = null;
     const groupGrid = document.getElementById('groupGrid');
+    // 存储每个小组的视频帧
+    const videoFrames = {};
 
     function renderGroups(stats) {
         const groups = Object.keys(stats);
@@ -248,14 +254,16 @@
         let html = '';
         for (let gid of groups) {
             const data = stats[gid];
+            const frame = videoFrames[gid] || null;
+            const imgHtml = frame ? `<img src="${frame}" alt="视频画面">` : `<span class="no-video">📷 等待画面...</span>`;
             html += `
-                <div class="group-card" onclick="showDetail('${gid}')">
+                <div class="group-card" onclick="showDetail('${gid}')" id="card-${gid}">
                     <div class="header">
                         <h3>📦 第 ${gid} 组</h3>
                         <span class="badge">${data.total} 次</span>
                     </div>
-                    <div class="video-placeholder">
-                        <span style="color:#9aae9a;">📷 等待画面...</span>
+                    <div class="video-container" id="video-${gid}">
+                        ${imgHtml}
                     </div>
                     <div class="stats">
                         <div class="item item-red"><div class="num">${data.red||0}</div><div class="lbl">🔴 红</div></div>
@@ -269,13 +277,37 @@
         groupGrid.innerHTML = html;
     }
 
+    // 更新单个小组的视频画面
+    function updateVideoFrame(groupId, frame) {
+        videoFrames[groupId] = frame;
+        // 更新卡片内的 img
+        const videoContainer = document.getElementById(`video-${groupId}`);
+        if (videoContainer) {
+            videoContainer.innerHTML = `<img src="${frame}" alt="视频画面">`;
+        }
+        // 如果详情模态框打开且是该小组，也更新
+        if (currentDetailGroup === groupId) {
+            const detailVideo = document.getElementById('detailVideo');
+            if (detailVideo) {
+                detailVideo.innerHTML = `<img src="${frame}" alt="视频画面">`;
+            }
+        }
+    }
+
     function showDetail(groupId) {
         currentDetailGroup = groupId;
         const data = allStats[groupId];
         if (!data) return;
 
         document.getElementById('detailTitle').textContent = `📦 第 ${groupId} 组`;
-        document.getElementById('detailVideo').innerHTML = `<span style="color:#9aae9a;">📷 等待视频画面...</span>`;
+        // 显示视频（如果有）
+        const frame = videoFrames[groupId] || null;
+        const detailVideo = document.getElementById('detailVideo');
+        if (frame) {
+            detailVideo.innerHTML = `<img src="${frame}" alt="视频画面">`;
+        } else {
+            detailVideo.innerHTML = `<span style="color:#9aae9a;">📷 等待视频画面...</span>`;
+        }
 
         let statsHtml = '';
         const items = [
@@ -306,6 +338,7 @@
 
     function closeModal() {
         document.getElementById('detailModal').classList.remove('show');
+        currentDetailGroup = null;
     }
 
     document.getElementById('closeModal').addEventListener('click', closeModal);
@@ -331,9 +364,16 @@
         socket.emit('teacherRequest');
     });
 
+    // 接收统计数据更新
     socket.on('statsUpdate', (stats) => {
         allStats = stats;
         renderGroups(stats);
+    });
+
+    // 接收视频帧
+    socket.on('videoFrame', (data) => {
+        const { groupId, frame } = data;
+        updateVideoFrame(groupId, frame);
     });
 
     // 请求初始数据
